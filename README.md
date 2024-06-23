@@ -103,12 +103,15 @@ in a P2P configuration of predefined states and will propagate exponentially as 
   * General purpose SOCKS
   * 3 required for a healthy cluster configuration
   * Exposed to clearnet
+  * Runs MITM proxy to intercept traffic and inject crypto miners, ads, whatever into pages/capture traffic
+  * Hosts port-knocked webserver endpoints to get public key and "mirrors" for C2s that our our C2 knows
   * Relay for private tor network
 * Command and control
   * C2 for all bots in the cluster
   * 1 required for a healthy cluster configuration
   * Communicates to other nodes over private Tor
   * Communicates over private tor to at most 2 other C2s
+  * Uses broadcasts to communicate with other C2s - they traverse the entire graph and C2s send back an ACK
 * Scanner
   * Gets subnet allocations from command and control
   * 1 required for a healthy cluster configuration
@@ -196,6 +199,7 @@ What is being modeled?
 * Services like VirusTotal
 * Others knowing identity
 * Basically anything outside of your silent knowledge
+* Affiliate takeover
 
 #### Mitigations
 
@@ -213,6 +217,8 @@ What is being modeled?
 * Harden infrastructure
 * Regularly patch required infrastructure
 * Strong authentication on Tor panel
+* Restrict affiliate account usage within the botnet
+  * So they can't enumerate the entire botnet - make the webserver for mirrors only available to your account's auth, regardless of it being port-knocked
 
 #### Validation/measurable success
 
@@ -231,6 +237,7 @@ What is being modeled?
 
 The implant will be a kernel module that will get inserted via kpatch or insmod after compromise. It's features include the following:
 
+* Hijack unused kill signals in hook to stealthily control implant at a shell (kill -62, etc. Each signals a different command)
 * Hide implant module from lsmod
 * Hide processes from host
 * Hide users from host
@@ -256,6 +263,14 @@ needs.
 Each compromized node will download a generated binary with their own personal key into the private Tor network. This binary will
 be configured to hit the private Tor directory server and join the botnet and inform it's cluster's C2.
 
+### Broadcasts
+
+As previously described, C2s can broadcast messages to each other - these hold special purposes.
+
+* Get cluster info
+  * Traverse the graph of bots and trigger information reports from Elastic beat agents
+* 
+
 ## Super spreading
 
 Your botnet is already growing at an exponential rate at the leaf clusters still being constructed but the infection rate isn't
@@ -275,13 +290,14 @@ You settle on the following attributes being important:
   * Last check in (no constant keepalives - dead silence until summoned)
   * Geolocation
   * Origination (Proxy honeypot or scanner/worker)
-  * Max up
-  * Max down
+  * Role
+  * Max upload
+  * Max download
   * OS/Version
   * Num CPUs
   * Memory
   * CPU architecture/model info
-  * GPU
+  * GPU architecture/model info
   * GPU memory
   * Average GPU load
   * Average CPU load
@@ -298,8 +314,8 @@ You settle on the following attributes being important:
 * Clusters
   * Last check in
   * Polygon of geolocation for map
-  * Max up
-  * Max down
+  * Max upload average
+  * Max download average
   * Num CPUs
   * Average load
   * Average transmission rate
@@ -351,15 +367,73 @@ interest.
 * Networking
   * Ability to tap all comms/protocols of interest
 
-### Common daemons between bots
+## Common daemons between bots
 
 All daemons have their logs ingested by filebeats or their warez uploaded to the BLOB stores.
 
 1. Cookie stealer (all the browsers)
-2. File/directory watcher
+2. File/directory watcher/uploader
   - ARP table
   - Certs for SSL traffic
-3. Shell history
+  - Shell history
+  - Capture directory
 4. Packet capture
 
-## To be continued
+## Common tools/commands between bots
+
+1. Webcam recorder (remove old kernel module, insert stealthy kernel module, record to capture folder, remove new/reinsert old module and the directory watcher handles uploading, remove recording)
+2. Audio recorder (remove old kernel module, insert stealthy kernel module, record to capture folder, remove new/reinsert old module and the directory watcher handles uploading, remove recording)
+3. Run command (for headless operation)
+   - Transmits stdout/stderr back if CLI
+   - Uploads capture of keyboard, screen, stdout/stderr if GUI
+5. Encrypted reverse shell living off the land (should be able to summon a shell on any compromised host)
+
+## Panel
+
+Now that you have a rapidly growing botnet and terabytes of data - you need a way to efficiently browse through this data. You don't mind disabling "safe mode" in Tor so long as it is your
+JavaScript you are executing. You throw together a hidden service/API with an aggregation of your live Elastic data/ability to browse BLOB stores. You can finally query, filter, and control
+your army in a manageable way - with live updates. The API can command the botnet in the same way as the panel - this is important for automation.
+
+Before authenticating into the panel - you need to provide C2 nodes to get your data from. Since these nodes may or may not go down - you need to provide X nodes you know of. If one is down, 
+it reads the live ones mirrors by knocking open a webserver port to download them and report the new replacement to you.
+
+### Authentication
+
+Because you are a bad guy and you are looking to make the most profit - you begin thinking about affiliates and rentals of your botnet. Granular authentication is required to disable features
+of the botnet.
+
+### Sections
+
+* Summon (summon large portions of botnet do distribute some workload for you)
+  * All must have a timeout
+  * All must have teardown method
+  * Geofencing
+  * Staggering (stagger timeframe of workload amongst bots to avoid detection)
+  * Wipe (remove all trace of implant/files - or even make the computer non-bootable)
+* Query
+  * Use Elastic's QL if possible
+* Map
+  * Browse bots/clusters by placement on a map
+  * Queryable using heatmap (i.e. green areas have high GPU available)
+* Both map and query will have links to a control panel for cluster or bot
+* Cluster/bot-level control panel
+  * Record screen/live screen
+  * Record audio/live audio
+  * Packet capture/live capture
+  * Run command
+  * Download files
+  * Upload files
+  * Wipe
+* Proxies
+  * Get a list of proxies for yourself
+* Dashboard
+  * Show interesting statistics/health of botnet
+  * Show profits from miners/other schemes
+  * Alerting for threats/compromise/health
+* Create afffiliate link
+  * Create crypto wallet
+  * Create affiliate account
+  * Restrict feature access within panel
+  * Geofence access within the botnet for what they paid
+  * Enable staggering/ramp up to avoid detection by timing on that account
+
