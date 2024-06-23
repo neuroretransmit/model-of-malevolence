@@ -1,5 +1,5 @@
 # model-of-malevolence
-Experiments in thinking like a bad guy. Specifics reduced as is common in system design to reduce locking into means/methods except where necessary.
+Experiments in thinking like a bad guy. Specifics reduced to reduce locking into means/methods except where possible.
 
 **Theoretical protocol vulnerability, scenario, etc. - none of this exists (or maybe it does and you should find it). This was an 
 idea I had implementing the QUIC protocol in an out-of-tree kernel module**
@@ -42,7 +42,8 @@ this chain of events and analyze the vulnerabilities/path to exploit.
                  - Can we escape a panic but overwrite the instruction pointer to execute our payload?
               
 
-With your heart racing and in an effort to not go to prison, you decide you have to do this right.
+With your heart racing and in an effort to not go to prison, you decide you have to do this right. So long as neighbors are Linux 
+boxes - this is a wormable exploit if they can talk on the protocol in question/run the same software.
 
 ## Doing it right
 
@@ -111,9 +112,10 @@ in a P2P configuration of predefined states and will propagate exponentially as 
 * Scanner
   * Gets subnet allocations from command and control
   * 1 required for a healthy cluster configuration
-  * Reports vulnerable hosts to attacker node over private Tor
-* Attacker
+  * Reports vulnerable hosts to worker node over private Tor
+* Worker
   * Launches exploit at vulnerable hosts found by scanner
+  * General purpose worker
   * 1 required for a healthy cluster configuration
   * Ask C2 if reverse shell connected over private Tor (if not, marked invalid host in C2)
 
@@ -136,6 +138,15 @@ is complete - it will keep searching for new nodes. When one is found,the C2 wil
 to distribute bots amongst clusters. With this configuration, the network will grow asynchronously out of leaf clusters and compartmentalize
 comms over our private version of Tor.
 
+When persistence is established, the bots download their implant from a common file-upload website that isn't likely to raise flags on a
+network appliance. Once loaded, the implant does the following:
+
+1. Hides the port the agent communicates on from the host.
+2. Creates a working directory that is hidden from the host by using the defined prefix/suffix in implant.
+3. Launches the agent and hides the process from the host.
+4. Downloads toolset for role configuration
+5. Executes role or waits for commands from its delegator
+
 ### Threat model
 
 Now that we have a general picture of where this killchain is going - let's model some risks.
@@ -149,7 +160,7 @@ What is being modeled?
 - Control panel on regular Tor through gateway from private
 - Compromise of control panel
 - Compromise of C2 node
-- Compromise of Attacker node
+- Compromise of Worker node
 - Compromise of Scanner node
 - Compromise of Proxy node
 - Implant found and analyzed
@@ -235,6 +246,7 @@ The implant will be a kernel module that will get inserted via kpatch or insmod 
 * Transmit files
   * Hide upload process with implant
 * Elevate privileges of a command
+* Update implant
 
 That is it - the rest will simiply be executing commands on the host or dropping files/hiding them and their executions to suit our 
 needs.
@@ -244,6 +256,110 @@ needs.
 Each compromized node will download a generated binary with their own personal key into the private Tor network. This binary will
 be configured to hit the private Tor directory server and join the botnet and inform it's cluster's C2.
 
+## Super spreading
+
+Your botnet is already growing at an exponential rate at the leaf clusters still being constructed but the infection rate isn't
+big or growing fast enough for you. The exposure of proxies to the clearnet had an alternate purpose. Since they are scarce and
+such a headache to find without paying, you submit each new bot to a proxy list website and let users spread it to other proxy
+lists - exponential growth on top of exponential growth. Each connection to the proxy will be tossed the same exploit to grab
+new Linux hosts.
+
+## Observability/Monitoring
+
+We need a dashboard/panel to manage and query our bots. This requires standing up a bit of infrastructure. We will need something
+like Elastic or Splunk to eat logs from our compromised machines and keep track of their juicy details.
+
+You settle on the following attributes being important:
+
+* Bots
+  * Last check in (no constant keepalives - dead silence until summoned)
+  * Geolocation
+  * Origination (Proxy honeypot or scanner/worker)
+  * Max up
+  * Max down
+  * OS/Version
+  * Num CPUs
+  * Memory
+  * CPU architecture/model info
+  * GPU
+  * GPU memory
+  * Average GPU load
+  * Average CPU load
+  * Average memory usage
+  * Average transmission rate
+  * Average receive rate
+  * Disk space
+  * Vuln patched
+  * Has persistent storage
+  * Last updated
+  * Orphaned (if all in cluster communicating with node go down)
+  * Resolved domain
+ 
+* Clusters
+  * Last check in
+  * Polygon of geolocation for map
+  * Max up
+  * Max down
+  * Num CPUs
+  * Average load
+  * Average transmission rate
+  * Average receive rate
+  * Health
+    * Status
+    * Node state
+
+### Log daemon deployment for bots
+
+To deploy your log collectors to the bot nodes:
+
+1. Send filebeat agents that call back to Elastic from C2
+2. Put the binary in directory hidden by implant
+3. Execute
+4. Hide process with implant
+5. Update role configuration to enable/hide agent every reboot.
+
+### Storage
+
+Our bots will likely have data we want to exfiltrate and will need a hefty amount of storage to do that. As we
+want reliability and not failure on node takedowns - with crypto buy a BLOB store over Tor. Alternatively, find
+a file-sharing website and use headless automation or their API to automate account registration so clusters
+can have their own accounts. Important in this step is that usernames/passwords aren't sequential or identifiable. 
+Either go full random or generate real-looking usernames/passwords in a uniformly random way.
+
+Storage costs on BLOB stores are negligible.
+
+## Common kernel modules between bot implants
+
+To be the stealthiest spy there is, you need to modify a few default drivers and set up collections for data of 
+interest.
+
+* Webcam module
+  * Modification of official linux kernel module
+    * Don't enable activity light if possible
+    * Don't report activity to OS
+  * Official module removed when webcam requested, modified module inserted until inactive - then old reinserted.
+* Microphone module
+  * Modification of official linux kernel module
+    * Don't enable activity light if possible
+    * Don't report activity to OS
+* Screen recorder
+  * Ability to hijack video driver for recordings/multiple screens
+* Keylogger
+  * Ability to hijack all keyboards and log to separate files
+* Mouse control
+  * Ability to send mouse movements/actions to existing driver for GUI applications
+* Networking
+  * Ability to tap all comms/protocols of interest
+
+### Common daemons between bots
+
+All daemons have their logs ingested by filebeats or their warez uploaded to the BLOB stores.
+
+1. Cookie stealer (all the browsers)
+2. File/directory watcher
+  - ARP table
+  - Certs for SSL traffic
+3. Shell history
+4. Packet capture
+
 ## To be continued
-
-
